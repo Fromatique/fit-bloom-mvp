@@ -1,0 +1,291 @@
+﻿```html
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fit & Bloom - MVP</title>
+  <!-- Script global pour gérer le chargement de Supabase -->
+  <script>
+    let supabase;
+
+    function onSupabaseLoad() {
+      if (window.supabase && typeof window.supabase === 'function') {
+        try {
+          supabase = window.supabase({
+            url: 'https://mkrrdplfcrjclhowwyip.supabase.co', // Ton URL Supabase
+            anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rcnJkcGxmY3JqY2xob3d3eWlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA1MDgxMjcsImV4cCI6MjA2NjA4NDEyN30.zicgUoAq9_vMHsCteoMvJMnjdzYgxdEX_4S662_e5m0' // Ta clé anon
+          });
+          console.log('Supabase chargé avec succès');
+        } catch (e) {
+          console.error('Erreur lors de l’initialisation de Supabase :', e);
+          alert('Erreur : Supabase ne peut pas être initialisé. Contactez le support.');
+        }
+      } else {
+        console.error('Supabase non disponible après chargement.');
+        alert('Erreur : Supabase ne fonctionne pas. Contactez le support.');
+      }
+    }
+
+    function onSupabaseError() {
+      console.error('Échec du chargement de Supabase. Vérifiez la connexion ou le script.');
+      alert('Erreur : Supabase ne fonctionne pas. Contactez le support.');
+    }
+  </script>
+  <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.22.5/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.3/dist/umd/supabase.min.js" onload="onSupabaseLoad()" onerror="onSupabaseError()"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const App = () => {
+      const [user, setUser] = useState(null);
+      const [calories, setCalories] = useState(0);
+      const [foodLog, setFoodLog] = useState([]);
+      const [cycleDay, setCycleDay] = useState(1);
+      const [adIndex, setAdIndex] = useState(0);
+
+      const ads = [
+        { img: "https://via.placeholder.com/300x100?text=Pub+Crème+Anti-Vergetures", link: "#" },
+        { img: "https://via.placeholder.com/300x100?text=Pub+Compléments+Prénataux", link: "#" }
+      ];
+
+      // Vérifier la session utilisateur
+      useEffect(() => {
+        if (supabase && supabase.auth) {
+          supabase.auth.getSession().then(({ data: { session } }) => {
+            setUser(session?.user ?? null);
+          });
+
+          const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+            setUser(session?.user ?? null);
+          });
+
+          return () => authListener.subscription.unsubscribe();
+        } else {
+          console.warn('Supabase non initialisé, authentification désactivée.');
+        }
+      }, []);
+
+      // Charger les données de l'utilisateur
+      useEffect(() => {
+        if (user && supabase && supabase.auth) {
+          fetchFoodLog();
+          fetchCycleDay();
+        }
+      }, [user]);
+
+      const fetchFoodLog = async () => {
+        if (supabase && supabase.from) {
+          const { data, error } = await supabase
+            .from('food_log')
+            .select('*')
+            .eq('user_id', user.id);
+          if (error) console.error(error);
+          else setFoodLog(data || []);
+        }
+      };
+
+      const fetchCycleDay = async () => {
+        if (supabase && supabase.from) {
+          const { data, error } = await supabase
+            .from('cycle_log')
+            .select('day')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (error) console.error(error);
+          else setCycleDay(data[0]?.day || 1);
+        }
+      };
+
+      const login = async () => {
+        if (supabase && supabase.auth) {
+          const email = prompt("Entrez votre email :");
+          const password = prompt("Entrez votre mot de passe :");
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error) alert("Erreur de connexion : " + error.message);
+        } else {
+          alert("Erreur : Supabase non chargé. Impossible de se connecter.");
+        }
+      };
+
+      const signup = async () => {
+        if (supabase && supabase.auth) {
+          const email = prompt("Entrez votre email :");
+          const password = prompt("Entrez votre mot de passe :");
+          const { error } = await supabase.auth.signUp({ email, password });
+          if (error) alert("Erreur d'inscription : " + error.message);
+          else alert("Inscription réussie ! Vérifiez votre email.");
+        } else {
+          alert("Erreur : Supabase non chargé. Impossible de s'inscrire.");
+        }
+      };
+
+      const logout = async () => {
+        if (supabase && supabase.auth) {
+          await supabase.auth.signOut();
+          setUser(null);
+          setFoodLog([]);
+          setCycleDay(1);
+        } else {
+          alert("Erreur : Supabase non chargé. Impossible de se déconnecter.");
+        }
+      };
+
+      const calculateCalories = () => {
+        const weight = prompt("Entrez votre poids (kg) :");
+        const activityLevel = prompt("Niveau d'activité (1: sédentaire, 2: modéré, 3: actif) :");
+        const baseCalories = weight * 20 * (activityLevel || 1);
+        setCalories(Math.round(baseCalories));
+      };
+
+      const addFood = async () => {
+        if (!user || !supabase || !supabase.from) return alert("Connectez-vous et vérifiez Supabase.");
+        const food = prompt("Nom de l'aliment :");
+        const cals = parseInt(prompt("Calories de l'aliment :"));
+        if (food && cals) {
+          const { error } = await supabase
+            .from('food_log')
+            .insert({ user_id: user.id, name: food, calories: cals });
+          if (error) console.error(error);
+          else setFoodLog([...foodLog, { name: food, calories: cals }]);
+        }
+      };
+
+      const predictFertility = async () => {
+        if (!user || !supabase || !supabase.from) return alert("Connectez-vous et vérifiez Supabase.");
+        const day = parseInt(prompt("Entrez le jour actuel de votre cycle (1-28) :"));
+        if (day >= 1 && day <= 28) {
+          const { error } = await supabase
+            .from('cycle_log')
+            .insert({ user_id: user.id, day });
+          if (error) console.error(error);
+          else {
+            setCycleDay(day);
+            alert(day >= 12 && day <= 16 ? "Période fertile probable !" : "Hors période fertile.");
+          }
+        } else {
+          alert("Veuillez entrer un jour valide (1-28).");
+        }
+      };
+
+      const changeAd = () => {
+        setAdIndex((adIndex + 1) % ads.length);
+      };
+
+      return (
+        <div className="min-h-screen bg-gradient-to-b from-pink-100 to-gray-100 p-6 font-sans">
+          <header className="bg-pink-600 text-white p-6 rounded-lg shadow-lg mb-8">
+            <h1 className="text-4xl font-bold tracking-tight">Fit & Bloom</h1>
+            <p className="text-lg">Nutrition, santé féminine & beauté</p>
+            <div className="mt-4">
+              {user ? (
+                <button
+                  className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600"
+                  onClick={logout}
+                >
+                  Déconnexion
+                </button>
+              ) : (
+                <div>
+                  <button
+                    className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 mr-2"
+                    onClick={login}
+                  >
+                    Connexion
+                  </button>
+                  <button
+                    className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
+                    onClick={signup}
+                  >
+                    Inscription
+                  </button>
+                </div>
+              )}
+            </div>
+          </header>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Section Nutrition */}
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <h2 className="text-2xl font-semibold mb-4 text-gray-800">Nutrition</h2>
+              <p className="text-lg">Besoins quotidiens : <span className="font-bold">{calories} kcal</span></p>
+              <button
+                className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition"
+                onClick={calculateCalories}
+              >
+                Calculer mes besoins
+              </button>
+              <button
+                className="mt-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition"
+                onClick={addFood}
+              >
+                Ajouter un aliment
+              </button>
+              <ul className="mt-4 space-y-2">
+                {foodLog.map((food, index) => (
+                  <li key={index} className="text-sm text-gray-600">
+                    {food.name}: {food.calories} kcal
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Section Fertilité */}
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <h2 className="text-2xl font-semibold mb-4 text-gray-800">Santé Féminine</h2>
+              <p className="text-lg">Jour du cycle : <span className="font-bold">{cycleDay}</span></p>
+              <button
+                className="mt-4 bg-pink-500 text-white px-4 py-2 rounded-lg hover:bg-pink-600 transition"
+                onClick={predictFertility}
+              >
+                Prédire ma fertilité
+              </button>
+              <p className="mt-2 text-sm text-gray-600">Suivez votre cycle ou grossesse.</p>
+            </div>
+
+            {/* Section Publicité */}
+            <div className="bg-white p-6 rounded-lg shadow-md">
+              <h2 className="text-2xl font-semibold mb-4 text-gray-800">Beauté & Bien-être</h2>
+              <img
+                src={ads[adIndex].img}
+                alt="Publicité"
+                className="w-full h-auto mb-4 rounded"
+              />
+              <a
+                href={ads[adIndex].link}
+                className="text-blue-500 hover:underline"
+              >
+                Découvrir les produits
+              </a>
+              <button
+                className="mt-2 bg-gray-300 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
+                onClick={changeAd}
+              >
+                Changer la pub
+              </button>
+            </div>
+          </div>
+
+          <footer className="mt-8 text-center text-gray-600">
+            <p>© 2025 Fit & Bloom. Tous droits réservés.</p>
+            <p>
+              Visitez notre site : <a href="https://sainetdiet.com" className="text-blue-500 hover:underline">sainetdiet.com</a>
+            </p>
+          </footer>
+        </div>
+      );
+    };
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
+```
